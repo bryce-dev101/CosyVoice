@@ -11,6 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# MODIFIED by Bryce Ferguson (2025) for mate-tts-server:
+# - Updated ONNX Runtime provider selection to support ROCm (ROCMExecutionProvider)
+#   in addition to CUDA, preventing warnings on AMD GPU systems
 from functools import partial
 from typing import Generator
 import json
@@ -52,9 +56,21 @@ class CosyVoiceFrontEnd:
         option.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         option.intra_op_num_threads = 1
         self.campplus_session = onnxruntime.InferenceSession(campplus_model, sess_options=option, providers=["CPUExecutionProvider"])
+
+        # Select appropriate execution provider based on available hardware
+        if torch.cuda.is_available():
+            available_providers = onnxruntime.get_available_providers()
+            if "ROCMExecutionProvider" in available_providers:
+                providers_list = ["ROCMExecutionProvider", "CPUExecutionProvider"]
+            elif "CUDAExecutionProvider" in available_providers:
+                providers_list = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+            else:
+                providers_list = ["CPUExecutionProvider"]
+        else:
+            providers_list = ["CPUExecutionProvider"]
+
         self.speech_tokenizer_session = onnxruntime.InferenceSession(speech_tokenizer_model, sess_options=option,
-                                                                     providers=["CUDAExecutionProvider" if torch.cuda.is_available() else
-                                                                                "CPUExecutionProvider"])
+                                                                     providers=providers_list)
         if os.path.exists(spk2info):
             self.spk2info = torch.load(spk2info, map_location=self.device)
         else:

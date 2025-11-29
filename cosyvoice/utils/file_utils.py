@@ -13,6 +13,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# MODIFIED by Bryce Ferguson (2025) for mate-tts-server:
+# - Changed load_wav() to use soundfile directly instead of torchaudio.load()
+#   to fix compatibility with torchaudio 2.9.0+ (backend parameter removed)
 
 import os
 import json
@@ -42,7 +46,12 @@ def read_json_lists(list_file):
 
 
 def load_wav(wav, target_sr):
-    speech, sample_rate = torchaudio.load(wav, backend='soundfile')
+    import soundfile as sf
+    import torch
+    # Use soundfile directly to avoid torchaudio backend issues
+    speech_np, sample_rate = sf.read(wav, dtype='float32')
+    # Convert to torch tensor and ensure it's (channels, samples) format
+    speech = torch.from_numpy(speech_np.T if speech_np.ndim > 1 else speech_np.reshape(1, -1))
     speech = speech.mean(dim=0, keepdim=True)
     if sample_rate != target_sr:
         assert sample_rate > target_sr, 'wav sample rate {} must be greater than {}'.format(sample_rate, target_sr)
